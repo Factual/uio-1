@@ -5,7 +5,7 @@
    :s3.secret  --OR--  env AWS_SECRET / AWS_SECRET_ACCESS_KEY
   "
   (:require [uio.impl :refer :all])
-  (:import [com.amazonaws.auth BasicAWSCredentials]
+  (:import [com.amazonaws.auth BasicAWSCredentials AWSCredentials DefaultAWSCredentialsProviderChain]
            [com.amazonaws.services.s3 AmazonS3Client]
            [com.amazonaws.services.s3.model ListObjectsRequest ObjectListing ObjectMetadata S3ObjectSummary]
            [com.amazonaws.services.s3.transfer TransferManager]
@@ -14,16 +14,14 @@
 (defn bucket-key->url [b k]
   (str "s3://" b default-delimiter k))
 
-(defn ^BasicAWSCredentials ->creds []
-  (BasicAWSCredentials. (or (config :s3.access)
-                            (env "AWS_ACCESS")
-                            (env "AWS_ACCESS_KEY_ID")
-                            (die "Either (uio/with {:s3.access ...} ... ), or AWS_ACCESS / AWS_ACCESS_KEY_ID env expected to be set"))
+(defn ^AWSCredentials ->creds-from-default-provider
+  []
+  (.getCredentials (DefaultAWSCredentialsProviderChain/getInstance)))
 
-                        (or (config :s3.secret)
-                            (env "AWS_SECRET")
-                            (env "AWS_SECRET_ACCESS_KEY")
-                            (die "Either (uio/with {:s3.secret ...} ... ), or AWS_SECRET / AWS_SECRET_ACCESS_KEY env expected to be set"))))
+(defn ^AWSCredentials ->creds []
+  (if (and (config :s3.access) (config :s3.secret))
+    (BasicAWSCredentials. (config :s3.access) (config :s3.secret))
+    (->creds-from-default-provider)))
 
 (defn with-s3 [url client-bucket-key->x]
   (try-with #(AmazonS3Client. (->creds))
